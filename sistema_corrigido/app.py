@@ -6,6 +6,7 @@ import sqlite3
 import hashlib
 import uuid
 from database import get_connection, init_db, encripta_password
+import time
 
 app = Flask(__name__)
 app.secret_key = "unidin-local-secret-key"
@@ -34,6 +35,32 @@ def discipline_for_user(discipline_id, user):
     conn.close()
     return discipline
 
+MAX_TENTATIVAS = 5
+TEMPO_BLOQUEIO_SEGUNDOS = 60
+
+# Estrutura em memoria: {email: {"tentativas": int, "bloqueado_ate": float}}
+controle_login:dict = {}
+
+def conta_bloqueada(email):
+    registro = controle_login.get(email)
+    if not registro:
+        return False, 0
+    bloqueado_ate = registro.get("bloqueado_ate", 0)
+    agora = time.time()
+    if agora < bloqueado_ate:
+        return True, int(bloqueado_ate - agora)
+    return False, 0
+
+def registrar_falha(email):
+    registro = controle_login.setdefault(email, {"tentativas": 0, "bloqueado_ate": 0})
+    registro["tentativas"] += 1
+    if registro["tentativas"] >= MAX_TENTATIVAS:
+        registro["bloqueado_ate"] = time.time() + TEMPO_BLOQUEIO_SEGUNDOS
+        registro["tentativas"] = 0
+
+def registrar_sucesso(email):
+    controle_login.pop(email, None)
+
 @app.route("/")
 def index():
     user = current_user()
@@ -47,17 +74,34 @@ def index():
 def login():
     email = request.args.get("email", "")
     password = request.args.get("password", "")
+
     if email or password:
-        password = encripta_password(password)
+        bloqueada, segundos_restantes = conta_bloqueada(email)
+        if bloqueada:
+            flash(
+                f"Conta temporariamente bloqueada. Tente novamente em "
+                f"{segundos_restantes} segundos.",
+                "error"
+            )
+            return render_template("login.html")
+
+        password_hash = encripta_password(password)
         conn = get_connection()
-        query = "SELECT * FROM users WHERE email = '" + email + "' AND password = '" + password + "'"
-        user = conn.execute(query).fetchone()
+        user = conn.execute(
+            "SELECT * FROM users WHERE email = ? AND password = ?",
+            (email, password_hash)
+        ).fetchone()
         conn.close()
+
         if user:
+            registrar_sucesso(email)
             session.clear()
             session["user_id"] = user["id"]
             return redirect(url_for("index"))
+
+        registrar_falha(email)
         flash("Credenciais inválidas.", "error")
+
     return render_template("login.html")
 
 @app.route("/logout")
