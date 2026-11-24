@@ -7,6 +7,7 @@ import hashlib
 import uuid
 from database import get_connection, init_db, encripta_password
 import time
+import html
 
 app = Flask(__name__)
 app.secret_key = "unidin-local-secret-key"
@@ -203,7 +204,8 @@ def add_message(discipline_id):
     discipline = discipline_for_user(discipline_id, user)
     if discipline is None:
         abort(403)
-    body = request.form.get("body", "")
+    raw_body = request.form.get("body", "")
+    body = html.escape(raw_body, quote=True)
     file = request.files.get("file")
     original_filename = file.filename if file and file.filename else None
     stored_filename = None
