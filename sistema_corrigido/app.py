@@ -1,3 +1,4 @@
+import secrets
 from flask import Flask, render_template, request, redirect, url_for, session, send_from_directory, abort, flash
 from pathlib import Path
 import base64
@@ -61,6 +62,20 @@ def registrar_falha(email):
 
 def registrar_sucesso(email):
     controle_login.pop(email, None)
+
+@app.context_processor
+def inject_csrf_token():
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_hex(32)
+    return {"csrf_token": session["csrf_token"]}
+
+@app.before_request
+def validate_csrf():
+    if request.method == "POST":
+        token_sessao = session.get("csrf_token")
+        token_form = request.form.get("csrf_token")
+        if not token_sessao or not token_form or not secrets.compare_digest(token_sessao, token_form):
+            abort(403)
 
 @app.route("/")
 def index():
@@ -173,7 +188,7 @@ def disciplina(discipline_id):
     conn.close()
     return render_template("disciplina.html", user=user, discipline=discipline, messages=messages, students=students, grades=grades)
 
-@app.route("/disciplina/<int:discipline_id>/nota", methods=["GET"])
+@app.route("/disciplina/<int:discipline_id>/nota", methods=["POST"])
 def save_grade(discipline_id):
     user = require_login()
     if user is None:
@@ -183,9 +198,9 @@ def save_grade(discipline_id):
     discipline = discipline_for_user(discipline_id, user)
     if discipline is None:
         abort(403)
-    student_id = request.args.get("student_id")
-    assessment = request.args.get("assessment")
-    value = request.args.get("value")
+    student_id = request.form.get("student_id")
+    assessment = request.form.get("assessment")
+    value = request.form.get("value")
     conn = get_connection()
     existing = conn.execute("SELECT id FROM grades WHERE discipline_id=? AND student_id=? AND assessment=?", (discipline_id, student_id, assessment)).fetchone()
     if existing:
@@ -220,7 +235,7 @@ def add_message(discipline_id):
     conn.close()
     return redirect(url_for("disciplina", discipline_id=discipline_id))
 
-@app.route("/mensagem/<int:message_id>/excluir", methods=["GET"])
+@app.route("/mensagem/<int:message_id>/excluir", methods=["POST"])
 def delete_message(message_id):
     user = require_login()
     if user is None:
